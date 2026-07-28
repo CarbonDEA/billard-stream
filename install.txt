@@ -8,10 +8,10 @@ echo "🎱 Billard Stream — Installation"
 echo "================================="
 
 # Spørg om klubnavn og API URL FØRST
-read -p "Indtast klubnavn [fbk]: " CLUB_NAME
+read -p "Indtast klubnavn [fbk]: " CLUB_NAME < /dev/tty
 CLUB_NAME=${CLUB_NAME:-fbk}
 
-read -p "Indtast API URL [https://www.wahl-it.dk/billard-stream/api/command.php]: " API_URL
+read -p "Indtast API URL [https://www.wahl-it.dk/billard-stream/api/command.php]: " API_URL < /dev/tty
 API_URL=${API_URL:-https://www.wahl-it.dk/billard-stream/api/command.php}
 
 # Installer dependencies
