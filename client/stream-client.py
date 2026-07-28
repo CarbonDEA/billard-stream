@@ -4,36 +4,21 @@ import json
 import logging
 import subprocess
 import platform
-import threading
+import time
 from pathlib import Path
 
-import websocket # pip install websocket-client
-import pystray # pip install pystray
-from PIL import Image, ImageDraw # pip install Pillow
+import requests # pip install requests
 
 # --- Configuration & Paths ---
 APP_NAME = "BillardStream"
-CONFIG_PATH_LINUX = "/etc/billard-stream/config.json"
-LOG_PATH_LINUX = "/var/log/billard-stream.log"
 
 def get_paths():
-    if platform.system() == "Windows":
-        appdata = os.getenv("APPDATA", os.path.expanduser("~"))
-        base_dir = Path(appdata) / APP_NAME
-        base_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Config is either in etc (not applicable here) or next to exe
-        exe_dir = Path(sys.executable).parent
-        return {
-            "config": exe_dir / "config.json", 
-            "log": base_dir / "log.txt"
-        }
-    else:
-        # Linux
-        return {
-            "config": Path(CONFIG_PATH_LINUX),
-            "log": Path(LOG_PATH_LINUX)
-        }
+    # Config and log are placed in the same directory as the script for simplicity and portability
+    base_dir = Path(sys.argv[0]).parent.absolute()
+    return {
+        "config": base_dir / "config.json", 
+        "log": base_dir / "stream-client.log"
+    }
 
 paths = get_paths()
 
@@ -50,7 +35,6 @@ logger = logging.getLogger(__name__)
 
 # --- Global State ---
 active_streams = {} # bord_id -> subprocess.Popen
-ws = None
 
 def load_config():
     try:
@@ -62,17 +46,16 @@ def load_config():
     return {}
 
 # --- FFmpeg Logic ---
-def start_stream(bord, rtsp, rtmp, title):
-    """
+def start_stream(bord, rtsp, rtmp):
+    \"\"\"
     Starts FFmpeg process to push RTSP stream to RTMP destination.
-    Adjust flags as needed for the specific camera/server requirements.
-    """
-    logger.info(f"Starting stream for Bord {bord}: {title}")
+    Using flags as requested: -rtsp_flags prefer_tcp, -c copy, -f flv.
+    \"\"\"
+    logger.info(f"Starting stream for Bord {bord}")
     
-    # Simple copy command: rtsp -> rtmp
-    # -i: input, -c copy: don't re-encode (low CPU), -f flv: required for RTMP
     cmd = [
         'ffmpeg',
+        '-rtsp_flags', 'prefer_tcp',
         '-i', rtsp,
         '-c', 'copy',
         '-f', 'flv',
@@ -103,95 +86,88 @@ def stop_stream(bord):
             proc.kill()
         del active_streams[bord]
 
-# --- WebSocket Logic ---
-def on_message(ws, message):
-    global active_streams
+# --- Polling Logic ---
+def send_status(klub, bord, status):
+    config = load_config()
+    api_url = config.get("api_url", "https://www.wahl-it.dk/billard-stream/api/command.php")
+    payload = {
+        "klub": klub,
+        "bord": bord,
+        "status": status
+    }
     try:
-        data = json.loads(message)
-        cmd = data.get("cmd")
-        bord = data.get("bord")
-        
-        if not bord:
-            return
-
-        if cmd == "start":
-            rtsp = data.get("rtsp")
-            rtmp = data.get("rtmp")
-            title = data.get("title", f"Bord {bord}")
-            
-            # Stop existing before starting new
-            stop_stream(bord)
-            
-            proc = start_stream(bord, rtsp, rtmp, title)
-            if proc:
-                active_streams[bord] = proc
-                ws.send(json.dumps({"bord": bord, "status": "running"}))
-            else:
-                ws.send(json.dumps({"bord": bord, "status": "error"}))
-                
-        elif cmd == "stop":
-            stop_stream(bord)
-            ws.send(json.dumps({"bord": bord, "status": "stopped"}))
-
+        # Using requests for cross-platform simplicity instead of raw curl subprocesses
+        response = requests.post(api_url, data=json.dumps(payload), headers={'Content-Type': 'application/json'}, timeout=10)
+        logger.info(f"Status update sent for Bord {bord}: {status} (HTTP {response.status_code})")
     except Exception as e:
-        logger.error(f"Error processing WS message: {e}")
+        logger.error(f"Error sending status for Bord {bord}: {e}")
 
-def on_error(ws, error):
-    logger.error(f"WebSocket Error: {error}")
+def poll_commands():
+    global active_streams
+    config = load_config()
+    klub = config.get("klub")
+    api_url = config.get("api_url", "https://www.wahl-it.dk/billard-stream/api/command.php")
+    
+    if not klub:
+        logger.error("No 'klub' defined in config.json. Polling skipped.")
+        return
 
-def on_close(ws, close_status_code, close_msg):
-    logger.info("WebSocket connection closed")
+    # In a real scenario, we might loop through all registered boards. 
+    # For this task, we follow the requested pattern for bord=1 as example or iterate based on config.
+    boards = config.get("boards", [1]) # Default to board 1 if none specified in config
+    
+    for bord in boards:
+        try:
+            url = f"{api_url}?klub={klub}&bord={bord}"
+            response = requests.get(url, timeout=10)
+            data = response.json()
+            cmd = data.get("cmd")
 
-def run_websocket():
-    global ws
-    url = "wss://wahl-it.dk/billard-stream/ws" # Assumed wss for production
-    ws = websocket.WebSocketApp(
-        url,
-        on_message=on_message,
-        on_error=on_error,
-        on_close=on_close
-    )
-    # Run forever with auto-reconnect logic usually handled by a loop in main
-    ws.run_forever()
+            if cmd == "start":
+                rtsp = data.get("rtsp")
+                rtmp = data.get("rtmp")
+                if rtsp and rtmp:
+                    stop_stream(bord)
+                    proc = start_stream(bord, rtsp, rtmp)
+                    if proc:
+                        active_streams[bord] = proc
+                        send_status(klub, bord, "running")
+                    else:
+                        send_status(klub, bord, "error")
+                else:
+                    logger.warning(f"Start command received for Bord {bord} but RTSP/RTMP URLs are missing.")
 
-# --- System Tray Logic ---
-def create_image():
-    # Create a simple 64x64 icon (blue circle)
-    width, height = 64, 64
-    image = Image.new('RGB', (width, height), color=(255, 255, 255))
-    dc = ImageDraw.Draw(image)
-    dc.ellipse([10, 10, 54, 54], fill=(0, 120, 215))
-    return image
+            elif cmd == "stop":
+                if bord in active_streams:
+                    stop_stream(bord)
+                    send_status(klub, bord, "stopped")
+                else:
+                    logger.info(f"Stop command received for Bord {bord}, but it was not running.")
 
-def on_exit(icon, item):
-    logger.info("Exiting application...")
-    for bord in list(active_streams.keys()):
-        stop_stream(bord)
-    icon.stop()
-    os._exit(0)
-
-def run_tray():
-    icon = pystray.Icon(APP_NAME)
-    icon.menu = pystray.Menu(
-        pystray.MenuItem('Exit', on_exit)
-    )
-    icon.icon = create_image()
-    icon.title = f"{APP_NAME} - Running"
-    icon.run()
+        except Exception as e:
+            logger.error(f"Error polling for Bord {bord}: {e}")
 
 # --- Main Entry point ---
 if __name__ == "__main__":
-    logger.info(f"Starting {APP_NAME} client on {platform.system()}...")
+    logger.info(f"Starting {APP_NAME} client on {platform.system()} (Polling Mode)...")
     
-    # Load config (though currently endpoint is hardcoded, this fulfills the requirement)
-    config = load_config()
-    
-    # Start WebSocket thread
-    ws_thread = threading.Thread(target=run_websocket, daemon=True)
-    ws_thread.start()
-    
-    # Start Tray (this blocks until icon.stop())
+    # Check if config exists, create a template if not
+    if not paths["config"].exists():
+        default_config = {
+            "klub": "KLUB",
+            "api_url": "https://www.wahl-it.dk/billard-stream/api/command.php",
+            "boards": [1]
+        }
+        with open(paths["config"], 'w') as f:
+            json.dump(default_config, f, indent=4)
+        logger.info(f"Created default config at {paths['config']}")
+
     try:
-        run_tray()
+        while True:
+            poll_commands()
+            time.sleep(30)
     except KeyboardInterrupt:
-        on_exit(None, None)
+        logger.info("Shutting down...")
+        for bord in list(active_streams.keys()):
+            stop_stream(bord)
+        sys.exit(0)

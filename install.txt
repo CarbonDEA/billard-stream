@@ -20,7 +20,7 @@ fi
 sudo mkdir -p /etc/billard-stream /var/log/billard-stream
 sudo curl -sSL "https://www.wahl-it.dk/billard-stream/stream-client.py" -o /usr/local/bin/stream-client
 sudo chmod +x /usr/local/bin/stream-client
-pip3 install websocket-client pystray Pillow --quiet
+pip3 install requests websocket-client pystray Pillow --quiet
 if [ ! -f /etc/billard-stream/config.json ]; then
   echo '{"server":"wss://www.wahl-it.dk/billard-stream/ws","klub":"","token":""}' | sudo tee /etc/billard-stream/config.json > /dev/null
 fi

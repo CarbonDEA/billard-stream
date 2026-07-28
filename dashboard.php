@@ -5,51 +5,36 @@
 require_once __DIR__ . '/config.php';
 requireLogin();
 
-$db = getDB();
 $klub = strtolower($_SESSION['klub_id']);
 $klubNavn = $_SESSION['klub_navn'];
-
-// Opret tabeller hvis de ikke findes
-$db->exec("CREATE TABLE IF NOT EXISTS bs_commands (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    klub VARCHAR(50) NOT NULL,
-    bord INT NOT NULL,
-    cmd VARCHAR(20) NOT NULL,
-    rtsp TEXT,
-    rtmp TEXT,
-    title VARCHAR(255),
-    status VARCHAR(20) DEFAULT 'pending',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB");
-
-$db->exec("CREATE TABLE IF NOT EXISTS bs_status (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    klub VARCHAR(50) NOT NULL,
-    bord INT NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'stopped',
-    message TEXT,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY klub_bord (klub, bord)
-) ENGINE=InnoDB");
 
 // Håndter start/stop
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bord'], $_POST['cmd'])) {
     $bord = (int)$_POST['bord'];
     $cmd = $_POST['cmd'];
-    $stmt = $db->prepare("INSERT INTO bs_commands (klub, bord, cmd, rtsp, rtmp, title) VALUES (?,?,?,?,?,?)");
-    $stmt->execute([$klub, $bord, $cmd, 
-        "rtsp://kamera{$bord}.klubben.dk/stream", 
-        "rtmp://a.rtmp.youtube.com/live2/XXXX-{$bord}",
-        "{$klubNavn} Bord {$bord}"
-    ]);
+    $commands = readData('commands');
+    $commands[] = [
+        'klub' => $klub,
+        'bord' => $bord,
+        'cmd' => $cmd,
+        'rtsp' => "rtsp://kamera{$bord}.klubben.dk/stream",
+        'rtmp' => "rtmp://a.rtmp.youtube.com/live2/XXXX-{$bord}",
+        'title' => "{$klubNavn} Bord {$bord}",
+        'status' => 'pending',
+        'created' => date('c')
+    ];
+    writeData('commands', $commands);
     $msg = "Kommando sendt: {$cmd} bord {$bord}";
 }
 
 // Hent status for alle borde
 $statuses = [];
-$q = $db->prepare("SELECT bord, status FROM bs_status WHERE klub=?");
-$q->execute([$klub]);
-while ($r = $q->fetch()) $statuses[$r['bord']] = $r['status'];
+$allStatus = readData('status');
+foreach ($allStatus as $s) {
+    if ($s['klub'] === $klub) {
+        $statuses[$s['bord']] = $s['status'];
+    }
+}
 ?><!DOCTYPE html>
 <html lang="da">
 <head>
@@ -84,6 +69,13 @@ h1 { font-size:1.3rem; color:#00ff41; margin-bottom:1.5rem; font-weight:400; let
 <body>
 <div class="nav">
     <span class="nav-brand">🎱 BILLARD STREAM</span>
+    <div class="nav-links">
+        <a href="dashboard.php" class="active">Dashboard</a>
+        <a href="cameras.php">Kameraer</a>
+        <a href="stream-keys.php">Stream Keys</a>
+        <a href="titles.php">Titler</a>
+        <a href="schedule.php">Planlægning</a>
+    </div>
     <span class="nav-user"><?= htmlspecialchars($klubNavn) ?> <a href="logout.php">[log ud]</a></span>
 </div>
 <main>
