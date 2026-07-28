@@ -1,57 +1,65 @@
 #!/bin/bash
+# Billard Stream — Linux installation
+# curl -sSL https://raw.githubusercontent.com/CarbonDEA/billard-stream/master/install.txt | bash
 
-# 1. Installere python3, ffmpeg, pip
-echo "Installing dependencies..."
-sudo apt-get update
-sudo apt-get install -y python3 python3-pip ffmpeg
+set -e
 
-# 2. Download stream-client.py til /usr/local/bin/stream-client
-echo "Downloading stream client..."
-# Note: Assuming the script is hosted at the API root or a known path since the URL wasn't provided for the .py file, 
-# but following instructions to put it in /usr/local/bin/stream-client.
-# Since no source URL was given for the script itself, I will use a placeholder variable that can be updated 
-# or assume it's fetched from the same domain as the API.
-CLIENT_URL="https://www.wahl-it.dk/billard-stream/stream-client.py"
-sudo curl -L $CLIENT_URL -o /usr/local/bin/stream-client
-sudo chmod +x /usr/local/bin/stream-client
+echo "🎱 Billard Stream — Installation"
+echo "================================="
 
-# 3. Installer pip packages: requests
-echo "Installing Python packages..."
-sudo pip3 install requests
-
-# 4. Spørg bruger om konfiguration
+# Spørg om klubnavn og API URL FØRST
 read -p "Indtast klubnavn [fbk]: " CLUB_NAME
 CLUB_NAME=${CLUB_NAME:-fbk}
 
 read -p "Indtast API URL [https://www.wahl-it.dk/billard-stream/api/command.php]: " API_URL
 API_URL=${API_URL:-https://www.wahl-it.dk/billard-stream/api/command.php}
 
-# 5. Opret /etc/billard-stream/config.json
-echo "Creating configuration..."
-sudo mkdir -p /etc/billard-stream
-echo "{\"club\": \"$CLUB_NAME\", \"api_url\": \"$API_URL\"}" | sudo tee /etc/billard-stream/config.json > /dev/null
+# Installer dependencies
+echo "📦 Installerer dependencies..."
+sudo apt-get update -qq
+sudo apt-get install -y -qq python3 python3-pip ffmpeg curl
 
-# 6. Opret systemd service /etc/systemd/system/billard-stream.service
-echo "Creating systemd service..."
-SERVICE_CONTENT="[Unit]
+# Download klient fra GitHub (SSL virker altid)
+echo "📥 Downloader stream client..."
+sudo curl -sSL "https://raw.githubusercontent.com/CarbonDEA/billard-stream/master/client/stream-client.py" -o /usr/local/bin/stream-client
+sudo chmod +x /usr/local/bin/stream-client
+
+# Installer Python pakke
+echo "📦 Installerer Python pakker..."
+sudo pip3 install requests --break-system-packages -q
+
+# Opret config
+echo "⚙️  Opretter konfiguration..."
+sudo mkdir -p /etc/billard-stream
+echo "{\"klub\": \"$CLUB_NAME\", \"api_url\": \"$API_URL\"}" | sudo tee /etc/billard-stream/config.json > /dev/null
+
+# Opret systemd service
+echo "🛠️  Opretter systemd service..."
+sudo tee /etc/systemd/system/billard-stream.service > /dev/null <<SERVICE
+[Unit]
 Description=Billard Stream Client
 After=network.target
+Wants=network.target
 
 [Service]
-ExecStart=/usr/bin/python3 /usr/local/bin/stream-client
-Restart=always
+Type=simple
 User=root
+ExecStart=/usr/local/bin/stream-client
+Restart=on-failure
+RestartSec=10
 
 [Install]
-WantedBy=multi-user.target"
+WantedBy=multi-user.target
+SERVICE
 
-echo "$SERVICE_CONTENT" | sudo tee /etc/systemd/system/billard-stream.service > /dev/null
-
-# 7. Start servicen
-echo "Starting service..."
+# Start service
+echo "▶️  Starter service..."
 sudo systemctl daemon-reload
 sudo systemctl enable billard-stream
 sudo systemctl start billard-stream
 
-# 8. Besked
+echo ""
 echo "✅ Klienten kører i baggrunden og starter automatisk ved genstart"
+echo "   Klub: $CLUB_NAME"
+echo "   API:  $API_URL"
+echo "   Log:  sudo journalctl -u billard-stream -f"
