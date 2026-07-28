@@ -83,13 +83,13 @@ body { font-family:'Nunito Sans',Arial,sans-serif; background:#0a0a0a; color:#e0
     <h2>📥 Download klient</h2>
     <p>Klienten er på vej — kommer snart til både Windows og Linux</p>
     <div class="dl-links">
-        <a href="#" class="dl-btn"><span>🪟</span> Windows <span class="os">.exe</span></a>
-        <a href="client/stream-client.py" class="dl-btn"><span>🐧</span> Linux <span class="os">.py</span></a>
+        <a href="https://github.com/CarbonDEA/billard-stream/raw/master/client/stream-client.py" class="dl-btn"><span>🪟🐧</span> Download klient <span class="os">Python</span></a>
+        <a href="https://github.com/CarbonDEA/billard-stream" class="dl-btn"><span>📂</span> GitHub repo</a>
     </div>
     <div style="margin-top:1.5rem;background:#111;border:1px solid #1a3a2a;border-radius:8px;padding:1rem;max-width:600px;margin-left:auto;margin-right:auto;text-align:left">
         <p style="color:#888;font-size:.8rem;margin-bottom:.5rem">🐧 Linux — installation på én linje:</p>
         <div style="display:flex;gap:.5rem;align-items:stretch">
-            <code id="installCmd" style="flex:1;background:#0a0a0a;padding:.8rem;border-radius:6px;color:#00ff41;font-size:.8rem;word-break:break-all">curl -sSL https://www.wahl-it.dk/billard-stream/install.txt | bash</code>
+            <code id="installCmd" style="flex:1;background:#0a0a0a;padding:.8rem;border-radius:6px;color:#00ff41;font-size:.8rem;word-break:break-all">curl -sSL https://raw.githubusercontent.com/CarbonDEA/billard-stream/master/install.txt | bash</code>
             <button onclick="copyCmd()" style="background:#1a3a2a;border:none;border-radius:6px;color:#00ff41;padding:.5rem .8rem;cursor:pointer;font-size:1.1rem" title="Kopiér">📋</button>
         </div>
     </div>
