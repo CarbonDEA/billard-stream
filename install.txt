@@ -1,28 +1,57 @@
 #!/bin/bash
-# Billard Stream — Linux installation
-# Serveres via: https://www.wahl-it.dk/billard-stream/install.txt
-# Brug: curl -sSL https://www.wahl-it.dk/billard-stream/install.txt | bash
 
-set -e
-echo "🎱 Billard Stream — Installation"
-echo "================================="
-if [[ "$OSTYPE" != "linux-gnu"* ]]; then echo "❌ Kun Linux."; exit 1; fi
-if ! command -v python3 &> /dev/null; then
-  if command -v apt &> /dev/null; then sudo apt update && sudo apt install -y python3 python3-pip
-  elif command -v dnf &> /dev/null; then sudo dnf install -y python3 python3-pip
-  else echo "❌ Installér Python 3 manuelt"; exit 1; fi
-fi
-if ! command -v ffmpeg &> /dev/null; then
-  if command -v apt &> /dev/null; then sudo apt install -y ffmpeg
-  elif command -v dnf &> /dev/null; then sudo dnf install -y ffmpeg
-  else echo "❌ Installér FFmpeg manuelt"; exit 1; fi
-fi
-sudo mkdir -p /etc/billard-stream /var/log/billard-stream
-sudo curl -sSL "https://www.wahl-it.dk/billard-stream/stream-client.py" -o /usr/local/bin/stream-client
+# 1. Installere python3, ffmpeg, pip
+echo "Installing dependencies..."
+sudo apt-get update
+sudo apt-get install -y python3 python3-pip ffmpeg
+
+# 2. Download stream-client.py til /usr/local/bin/stream-client
+echo "Downloading stream client..."
+# Note: Assuming the script is hosted at the API root or a known path since the URL wasn't provided for the .py file, 
+# but following instructions to put it in /usr/local/bin/stream-client.
+# Since no source URL was given for the script itself, I will use a placeholder variable that can be updated 
+# or assume it's fetched from the same domain as the API.
+CLIENT_URL="https://www.wahl-it.dk/billard-stream/stream-client.py"
+sudo curl -L $CLIENT_URL -o /usr/local/bin/stream-client
 sudo chmod +x /usr/local/bin/stream-client
-pip3 install requests websocket-client pystray Pillow --quiet
-if [ ! -f /etc/billard-stream/config.json ]; then
-  echo '{"server":"wss://www.wahl-it.dk/billard-stream/ws","klub":"","token":""}' | sudo tee /etc/billard-stream/config.json > /dev/null
-fi
-echo ""; echo "✅ Installation gennemført!"
-echo "📝 Log ind på https://www.wahl-it.dk/billard-stream/ og konfigurér."
+
+# 3. Installer pip packages: requests
+echo "Installing Python packages..."
+sudo pip3 install requests
+
+# 4. Spørg bruger om konfiguration
+read -p "Indtast klubnavn [fbk]: " CLUB_NAME
+CLUB_NAME=${CLUB_NAME:-fbk}
+
+read -p "Indtast API URL [https://www.wahl-it.dk/billard-stream/api/command.php]: " API_URL
+API_URL=${API_URL:-https://www.wahl-it.dk/billard-stream/api/command.php}
+
+# 5. Opret /etc/billard-stream/config.json
+echo "Creating configuration..."
+sudo mkdir -p /etc/billard-stream
+echo "{\"club\": \"$CLUB_NAME\", \"api_url\": \"$API_URL\"}" | sudo tee /etc/billard-stream/config.json > /dev/null
+
+# 6. Opret systemd service /etc/systemd/system/billard-stream.service
+echo "Creating systemd service..."
+SERVICE_CONTENT="[Unit]
+Description=Billard Stream Client
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /usr/local/bin/stream-client
+Restart=always
+User=root
+
+[Install]
+WantedBy=multi-user.target"
+
+echo "$SERVICE_CONTENT" | sudo tee /etc/systemd/system/billard-stream.service > /dev/null
+
+# 7. Start servicen
+echo "Starting service..."
+sudo systemctl daemon-reload
+sudo systemctl enable billard-stream
+sudo systemctl start billard-stream
+
+# 8. Besked
+echo "✅ Klienten kører i baggrunden og starter automatisk ved genstart"
