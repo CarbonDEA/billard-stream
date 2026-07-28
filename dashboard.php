@@ -12,7 +12,7 @@ $klubNavn = $_SESSION['klub_navn'];
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bord'], $_POST['cmd'])) {
     $bord = (int)$_POST['bord'];
     $cmd = $_POST['cmd'];
-    $commands = readData('commands');
+    $commands = readData('commands_' . $klub);
     $commands[] = [
         'klub' => $klub,
         'bord' => $bord,
@@ -23,7 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bord'], $_POST['cmd']
         'status' => 'pending',
         'created' => date('c')
     ];
-    writeData('commands', $commands);
+    writeData('commands_' . $klub, $commands);
     $msg = "Kommando sendt: {$cmd} bord {$bord}";
 }
 

@@ -46,22 +46,59 @@ def load_config():
     return {}
 
 # --- FFmpeg Logic ---
-def start_stream(bord, rtsp, rtmp):
-    \"\"\"
-    Starts FFmpeg process to push RTSP stream to RTMP destination.
-    Using flags as requested: -rtsp_flags prefer_tcp, -c copy, -f flv.
-    \"\"\"
-    logger.info(f"Starting stream for Bord {bord}")
+def start_stream(bord, rtmp, stream_type="ip", rtsp_url=None):
+    """
+    Starts FFmpeg process based on camera type.
+    - ip: RTSP input (copy)
+    - usb: Local device input (encode x264)
+    - builtin: Auto-detect local device per platform (encode x264)
+    """
+    logger.info(f"Starting stream for Bord {bord} (Type: {stream_type})")
     
-    cmd = [
-        'ffmpeg',
-        '-rtsp_flags', 'prefer_tcp',
-        '-i', rtsp,
-        '-c', 'copy',
-        '-f', 'flv',
-        rtmp
-    ]
-    
+    os_name = platform.system()
+    cmd = ['ffmpeg']
+
+    if stream_type == "ip":
+        if not rtsp_url:
+            logger.error("RTSP URL missing for type 'ip'")
+            return None
+        # ffmpeg -rtsp_flags prefer_tcp -i RTSP_URL -c copy -f flv RTMP_URL
+        cmd += [
+            '-rtsp_flags', 'prefer_tcp',
+            '-i', rtsp_url,
+            '-c', 'copy',
+            '-f', 'flv',
+            rtmp
+        ]
+    elif stream_type == "usb":
+        # usb: ffmpeg -f v4l2 -i /dev/video0 (Linux) eller -f dshow -i video="..." (Windows) -c:v libx264 -preset ultrafast -f flv RTMP_URL
+        if os_name == "Windows":
+            cmd += ['-f', 'dshow', '-i', 'video="USB Camera"'] # Default name, usually overridden in real setup or generic
+        elif os_name == "Linux":
+            cmd += ['-f', 'v4l2', '-i', '/dev/video0']
+        else:
+            logger.error(f"USB capture not supported on {os_name}")
+            return None
+        
+        cmd += ['-c:v', 'libx264', '-preset', 'ultrafast', '-f', 'flv', rtmp]
+
+    elif stream_type == "builtin":
+        # builtin: Linux: -f v4l2 -i /dev/video0. Windows: -f dshow -i video="Integrated Camera". macOS: -f avfoundation -i "0"
+        if os_name == "Linux":
+            cmd += ['-f', 'v4l2', '-i', '/dev/video0']
+        elif os_name == "Windows":
+            cmd += ['-f', 'dshow', '-i', 'video="Integrated Camera"']
+        elif os_name == "Darwin": # macOS
+            cmd += ['-f', 'avfoundation', '-i', '0']
+        else:
+            logger.error(f"Builtin camera not supported on {os_name}")
+            return None
+        
+        cmd += ['-c:v', 'libx264', '-preset', 'ultrafast', '-f', 'flv', rtmp]
+    else:
+        logger.error(f"Unknown stream type: {stream_type}")
+        return None
+
     try:
         process = subprocess.Popen(
             cmd, 
@@ -96,7 +133,6 @@ def send_status(klub, bord, status):
         "status": status
     }
     try:
-        # Using requests for cross-platform simplicity instead of raw curl subprocesses
         response = requests.post(api_url, data=json.dumps(payload), headers={'Content-Type': 'application/json'}, timeout=10)
         logger.info(f"Status update sent for Bord {bord}: {status} (HTTP {response.status_code})")
     except Exception as e:
@@ -112,9 +148,7 @@ def poll_commands():
         logger.error("No 'klub' defined in config.json. Polling skipped.")
         return
 
-    # In a real scenario, we might loop through all registered boards. 
-    # For this task, we follow the requested pattern for bord=1 as example or iterate based on config.
-    boards = config.get("boards", [1]) # Default to board 1 if none specified in config
+    boards = config.get("boards", [1]) 
     
     for bord in boards:
         try:
@@ -124,18 +158,26 @@ def poll_commands():
             cmd = data.get("cmd")
 
             if cmd == "start":
-                rtsp = data.get("rtsp")
+                stream_type = data.get("type", "ip") # Default to 'ip' for backward compatibility
                 rtmp = data.get("rtmp")
-                if rtsp and rtmp:
+                rtsp = data.get("rtsp") # Only used if type == 'ip'
+
+                if rtmp:
                     stop_stream(bord)
-                    proc = start_stream(bord, rtsp, rtmp)
+                    # Pass the necessary parameters based on type
+                    proc = start_stream(
+                        bord=bord, 
+                        rtmp=rtmp, 
+                        stream_type=stream_type, 
+                        rtsp_url=rtsp
+                    )
                     if proc:
                         active_streams[bord] = proc
                         send_status(klub, bord, "running")
                     else:
                         send_status(klub, bord, "error")
                 else:
-                    logger.warning(f"Start command received for Bord {bord} but RTSP/RTMP URLs are missing.")
+                    logger.warning(f"Start command received for Bord {bord} but RTMP URL is missing.")
 
             elif cmd == "stop":
                 if bord in active_streams:
@@ -151,7 +193,6 @@ def poll_commands():
 if __name__ == "__main__":
     logger.info(f"Starting {APP_NAME} client on {platform.system()} (Polling Mode)...")
     
-    # Check if config exists, create a template if not
     if not paths["config"].exists():
         default_config = {
             "klub": "KLUB",
