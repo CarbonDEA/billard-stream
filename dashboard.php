@@ -5,70 +5,114 @@
 require_once __DIR__ . '/config.php';
 requireLogin();
 
-$klub = $_SESSION['klub_navn'];
+$db = getDB();
+$klub = strtolower($_SESSION['klub_id']);
+$klubNavn = $_SESSION['klub_navn'];
+
+// Opret tabeller hvis de ikke findes
+$db->exec("CREATE TABLE IF NOT EXISTS bs_commands (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    klub VARCHAR(50) NOT NULL,
+    bord INT NOT NULL,
+    cmd VARCHAR(20) NOT NULL,
+    rtsp TEXT,
+    rtmp TEXT,
+    title VARCHAR(255),
+    status VARCHAR(20) DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB");
+
+$db->exec("CREATE TABLE IF NOT EXISTS bs_status (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    klub VARCHAR(50) NOT NULL,
+    bord INT NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'stopped',
+    message TEXT,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY klub_bord (klub, bord)
+) ENGINE=InnoDB");
+
+// Håndter start/stop
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bord'], $_POST['cmd'])) {
+    $bord = (int)$_POST['bord'];
+    $cmd = $_POST['cmd'];
+    $stmt = $db->prepare("INSERT INTO bs_commands (klub, bord, cmd, rtsp, rtmp, title) VALUES (?,?,?,?,?,?)");
+    $stmt->execute([$klub, $bord, $cmd, 
+        "rtsp://kamera{$bord}.klubben.dk/stream", 
+        "rtmp://a.rtmp.youtube.com/live2/XXXX-{$bord}",
+        "{$klubNavn} Bord {$bord}"
+    ]);
+    $msg = "Kommando sendt: {$cmd} bord {$bord}";
+}
+
+// Hent status for alle borde
+$statuses = [];
+$q = $db->prepare("SELECT bord, status FROM bs_status WHERE klub=?");
+$q->execute([$klub]);
+while ($r = $q->fetch()) $statuses[$r['bord']] = $r['status'];
 ?><!DOCTYPE html>
 <html lang="da">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Billard Stream — <?= htmlspecialchars($klub) ?></title>
+<title>Billard Stream — <?= htmlspecialchars($klubNavn) ?></title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 body { font-family:'Nunito Sans',Arial,sans-serif; background:#0a0a0a; color:#e0e0e0; min-height:100vh; }
-/* Nav */
 .nav { background:#111; border-bottom:1px solid #1a3a2a; padding:.8rem 2rem; display:flex; justify-content:space-between; align-items:center; }
 .nav-brand { color:#00ff41; font-size:1.1rem; font-weight:700; letter-spacing:.1em; }
 .nav-user { color:#888; font-size:.85rem; }
 .nav-user a { color:#ff4444; text-decoration:none; margin-left:1rem; font-size:.8rem; }
-/* Main */
 main { max-width:1000px; margin:0 auto; padding:2rem; }
 h1 { font-size:1.3rem; color:#00ff41; margin-bottom:1.5rem; font-weight:400; letter-spacing:.05em; }
-/* Bord cards */
+.msg { background:#0a1a0a; border:1px solid #004411; color:#00ff41; padding:.6rem 1rem; border-radius:8px; margin-bottom:1rem; font-size:.85rem; }
 .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px,1fr)); gap:1rem; }
 .card { background:#111; border:1px solid #1a3a2a; border-radius:12px; padding:1.5rem; }
 .card h3 { color:#e0e0e0; font-size:1rem; margin-bottom:.3rem; }
-.card .cam { color:#666; font-size:.8rem; margin-bottom:1rem; }
-.status-off { display:inline-block; padding:.25rem .6rem; border-radius:20px; font-size:.75rem; background:#1a0a0a; color:#ff4444; border:1px solid #441111; }
-.status-on { display:inline-block; padding:.25rem .6rem; border-radius:20px; font-size:.75rem; background:#0a1a0a; color:#00ff41; border:1px solid #004411; }
-.btn-start { background:#00ff41; color:#0a0a0a; border:none; padding:.5rem 1.5rem; border-radius:8px; font-size:.85rem; font-weight:600; cursor:pointer; width:100%; margin-top:.8rem; }
+.card .cam { color:#666; font-size:.8rem; margin-bottom:.8rem; }
+.badge { display:inline-block; padding:.25rem .6rem; border-radius:20px; font-size:.75rem; margin-bottom:.8rem; }
+.badge-off { background:#1a0a0a; color:#ff4444; border:1px solid #441111; }
+.badge-on { background:#0a1a0a; color:#00ff41; border:1px solid #004411; }
+.badge-error { background:#1a0a0a; color:#ff8800; border:1px solid #442200; }
+.card form { display:flex; gap:.5rem; }
+.btn-start { flex:1; background:#00ff41; color:#0a0a0a; border:none; padding:.5rem; border-radius:8px; font-size:.85rem; font-weight:600; cursor:pointer; }
 .btn-start:hover { background:#00cc33; }
-.btn-stop { background:#441111; color:#ff4444; border:1px solid #661111; padding:.5rem 1.5rem; border-radius:8px; font-size:.85rem; font-weight:600; cursor:pointer; width:100%; margin-top:.8rem; }
+.btn-stop { flex:1; background:#441111; color:#ff4444; border:1px solid #661111; padding:.5rem; border-radius:8px; font-size:.85rem; font-weight:600; cursor:pointer; }
 .btn-stop:hover { background:#661111; }
 </style>
 </head>
 <body>
 <div class="nav">
     <span class="nav-brand">🎱 BILLARD STREAM</span>
-    <span class="nav-user"><?= htmlspecialchars($klub) ?> <a href="logout.php">[log ud]</a></span>
+    <span class="nav-user"><?= htmlspecialchars($klubNavn) ?> <a href="logout.php">[log ud]</a></span>
 </div>
 <main>
-    <h1>🟢 Streams — <?= htmlspecialchars($klub) ?></h1>
+    <h1>🟢 Streams — <?= htmlspecialchars($klubNavn) ?></h1>
+    
+    <?php if (isset($msg)): ?>
+        <div class="msg"><?= htmlspecialchars($msg) ?></div>
+    <?php endif; ?>
     
     <div class="grid">
+        <?php for ($bord = 1; $bord <= 4; $bord++): 
+            $s = $statuses[$bord] ?? 'stopped';
+            $badge = $s === 'running' ? 'badge-on' : ($s === 'error' ? 'badge-error' : 'badge-off');
+            $label = $s === 'running' ? '● live' : ($s === 'error' ? '● fejl' : '● slukket');
+        ?>
         <div class="card">
-            <h3>Bord 1</h3>
-            <p class="cam">IP Camera 1 · 1080p</p>
-            <span class="status-off">● slukket</span>
-            <button class="btn-start">▶ START STREAM</button>
+            <h3>Bord <?= $bord ?></h3>
+            <p class="cam">IP Camera <?= $bord ?> · 1080p</p>
+            <div class="badge <?= $badge ?>"><?= $label ?></div>
+            <form method="post">
+                <input type="hidden" name="bord" value="<?= $bord ?>">
+                <?php if ($s === 'running'): ?>
+                    <button type="submit" name="cmd" value="stop" class="btn-stop">⏹ STOP</button>
+                <?php else: ?>
+                    <button type="submit" name="cmd" value="start" class="btn-start">▶ START STREAM</button>
+                <?php endif; ?>
+            </form>
         </div>
-        <div class="card">
-            <h3>Bord 2</h3>
-            <p class="cam">IP Camera 2 · 1080p</p>
-            <span class="status-off">● slukket</span>
-            <button class="btn-start">▶ START STREAM</button>
-        </div>
-        <div class="card">
-            <h3>Bord 3</h3>
-            <p class="cam">IP Camera 3 · 720p</p>
-            <span class="status-off">● slukket</span>
-            <button class="btn-start">▶ START STREAM</button>
-        </div>
-        <div class="card">
-            <h3>Bord 4</h3>
-            <p class="cam">IP Camera 4 · 720p</p>
-            <span class="status-off">● slukket</span>
-            <button class="btn-start">▶ START STREAM</button>
-        </div>
+        <?php endfor; ?>
     </div>
 </main>
 </body>
