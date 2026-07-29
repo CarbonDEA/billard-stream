@@ -23,27 +23,8 @@ jobs:
           echo "EXE built:"
           dir dist\BillardStream.exe
       
-      - name: Download FFmpeg
-        run: |
-          curl -sSL -o ffmpeg.zip https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
-          7z x ffmpeg.zip -offmpeg-temp > nul
-          copy /y ffmpeg-temp\ffmpeg-*\bin\ffmpeg.exe dist\
-          echo "FFmpeg downloaded"
-      
-      - name: Create ZIP
-        run: |
-          cd dist
-          powershell Compress-Archive -Path BillardStream.exe, ffmpeg.exe -DestinationPath ../BillardStream-Portable.zip
-          echo "ZIP created"
-      
-      - name: Upload artifact
+      - name: Upload .exe
         uses: actions/upload-artifact@v4
         with:
           name: BillardStream-Windows
           path: dist/BillardStream.exe
-      
-      - name: Upload ZIP
-        uses: actions/upload-artifact@v4
-        with:
-          name: BillardStream-Portable
-          path: BillardStream-Portable.zip
