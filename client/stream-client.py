@@ -128,6 +128,8 @@ def stop_stream(bord):
         del active_streams[bord]
 
 # --- Polling Logic ---
+HEADERS = {'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) BillardStream/1.0'}
+
 def send_status(klub, bord, status):
     config = load_config()
     api_url = config.get("api_url", "https://www.wahl-it.dk/billard-stream/api/command.php")
@@ -137,7 +139,7 @@ def send_status(klub, bord, status):
         "status": status
     }
     try:
-        response = requests.post(api_url, data=json.dumps(payload), headers={'Content-Type': 'application/json'}, timeout=10, verify=False)
+        response = requests.post(api_url, data=json.dumps(payload), headers={**HEADERS, 'Content-Type': 'application/json'}, timeout=10, verify=False)
         logger.info(f"Status update sent for Bord {bord}: {status} (HTTP {response.status_code})")
     except Exception as e:
         logger.error(f"Error sending status for Bord {bord}: {e}")
@@ -157,7 +159,8 @@ def poll_commands():
     for bord in boards:
         try:
             url = f"{api_url}?klub={klub}&bord={bord}"
-            response = requests.get(url, timeout=10, verify=False)
+            response = requests.get(url, timeout=10, verify=False, headers=HEADERS)
+            logger.debug(f"Poll response: {response.status_code} ({len(response.content)} bytes)")
             data = response.json()
             cmd = data.get("cmd")
 
