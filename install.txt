@@ -44,7 +44,7 @@ Wants=network.target
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/local/bin/stream-client
+ExecStart=/usr/bin/python3 /usr/local/bin/stream-client
 Restart=on-failure
 RestartSec=10
 
