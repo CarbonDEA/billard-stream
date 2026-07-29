@@ -84,7 +84,7 @@ def start_stream(bord, rtmp, stream_type="ip", rtsp_url=None):
             logger.error(f"USB capture not supported on {os_name}")
             return None
         
-        cmd += ['-c:v', 'libx264', '-preset', 'ultrafast', '-f', 'flv', rtmp]
+        cmd += ['-c:v', 'libx264', '-preset', 'ultrafast', '-b:v', '2000k', '-f', 'flv', rtmp]
 
     elif stream_type == "builtin":
         # builtin: Linux: -f v4l2 -i /dev/video0. Windows: -f dshow -i video="Integrated Camera". macOS: -f avfoundation -i "0"
@@ -98,7 +98,7 @@ def start_stream(bord, rtmp, stream_type="ip", rtsp_url=None):
             logger.error(f"Builtin camera not supported on {os_name}")
             return None
         
-        cmd += ['-c:v', 'libx264', '-preset', 'ultrafast', '-f', 'flv', rtmp]
+        cmd += ['-c:v', 'libx264', '-preset', 'ultrafast', '-b:v', '2000k', '-f', 'flv', rtmp]
     else:
         logger.error(f"Unknown stream type: {stream_type}")
         return None
