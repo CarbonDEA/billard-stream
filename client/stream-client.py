@@ -15,10 +15,12 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 APP_NAME = "BillardStream"
 
 def get_paths():
-    # Config and log are placed in the same directory as the script for simplicity and portability
+    # Prioriter /etc/billard-stream/config.json, ellers ved siden af scriptet
+    etc_config = Path("/etc/billard-stream/config.json")
     base_dir = Path(sys.argv[0]).parent.absolute()
+    local_config = base_dir / "config.json"
     return {
-        "config": base_dir / "config.json", 
+        "config": etc_config if etc_config.exists() else local_config, 
         "log": base_dir / "stream-client.log"
     }
 
