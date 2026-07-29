@@ -8,6 +8,8 @@ import time
 from pathlib import Path
 
 import requests # pip install requests
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # --- Configuration & Paths ---
 APP_NAME = "BillardStream"
@@ -133,7 +135,7 @@ def send_status(klub, bord, status):
         "status": status
     }
     try:
-        response = requests.post(api_url, data=json.dumps(payload), headers={'Content-Type': 'application/json'}, timeout=10)
+        response = requests.post(api_url, data=json.dumps(payload), headers={'Content-Type': 'application/json'}, timeout=10, verify=False)
         logger.info(f"Status update sent for Bord {bord}: {status} (HTTP {response.status_code})")
     except Exception as e:
         logger.error(f"Error sending status for Bord {bord}: {e}")
@@ -153,7 +155,7 @@ def poll_commands():
     for bord in boards:
         try:
             url = f"{api_url}?klub={klub}&bord={bord}"
-            response = requests.get(url, timeout=10)
+            response = requests.get(url, timeout=10, verify=False)
             data = response.json()
             cmd = data.get("cmd")
 
