@@ -125,7 +125,7 @@ class BillardApp:
         
         # --- Log panel ---
         log_frame = tk.LabelFrame(self.root, text="📋 Log", fg=accent, bg=bg,
-                                  font=("Arial", 10), pad=5)
+                                  font=("Arial", 10), padx=5, pady=5)
         log_frame.pack(fill="both", expand=True, padx=15, pady=(5,15))
         self.log_text = tk.Text(log_frame, height=10, bg="#111", fg="#ccc",
                                  font=("Consolas", 9), relief="flat", wrap="word")
