@@ -14,10 +14,8 @@ $msg = "";
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_camera'])) {
     $bord = (int)$_POST['bord'];
     $navn = trim($_POST['navn']);
-    $type = $cam['type'] ?? 'ip';
-    $opl = $cam['opløsning'] ?? $cam['resolution'] ?? '1080p';
-    $info = $type === 'ip' ? ($cam['rtsp'] ?? $cam['ip'] ?? '') : ($cam['device'] ?? '');
-    $label = ['ip'=>'📡 IP','usb'=>'🔌 USB','builtin'=>'💻 Indbygget'][$type] ?? '📡 IP';
+    $type = $_POST['type'] ?? 'ip';
+    $opl = $_POST['opløsning'] ?? $_POST['resolution'] ?? '1080p';
     
     $rtsp = "";
     $device = "";
@@ -27,6 +25,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_camera'])) {
         $rtsp = trim($_POST['rtsp']);
     } elseif ($type === 'usb') {
         $device = trim($_POST['device']);
+    }
+
+    // Duplicate check: Tjek om bord-nummeret allerede findes i klubben
+    $existingCameras = readData('cameras_' . $klub) ?: [];
+    $isDuplicate = false;
+    foreach ($existingCameras as $c) {
+        if (($c['bord'] ?? 0) == $bord) {
+            $msg = "❌ Bord {$bord} findes allerede!";
+            $isDuplicate = true;
+            break;
+        }
     }
 
     // Validering baseret på type
@@ -39,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_camera'])) {
         $isValid = true;
     }
 
-    if ($isValid) {
+    if ($isValid && !$isDuplicate) {
         // Brug klub-specifik datafil som anmodet: readData('cameras_' . $klub)
         $cameras = readData('cameras_' . $klub);
         
@@ -50,11 +59,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_camera'])) {
             'ip' => $ip,
             'rtsp' => $rtsp,
             'device' => $device,
-            'resolution' => $res
+            'resolution' => $opl
         ];
         writeData('cameras_' . $klub, $cameras);
         $msg = "Kamera tilføjet: {$navn} (Bord {$bord})";
-    } else {
+    } elseif (!$isDuplicate && !$isValid) {
         $msg = "Fejl: Udfyld venligst alle påkrævede felter for den valgte kameratype.";
     }
 }
