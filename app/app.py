@@ -50,7 +50,7 @@ class BillardApp:
         
         # --- Licens frame ---
         lf = tk.LabelFrame(self.root, text="🔑 Licens", fg=accent, bg=bg, 
-                          font=("Arial", 10), pad=10)
+                          font=("Arial", 10), padx=10, pady=10)
         lf.pack(fill="x", padx=15, pady=5)
         row = tk.Frame(lf, bg=bg)
         row.pack(fill="x")
@@ -69,7 +69,7 @@ class BillardApp:
         
         # --- Stream kontrol frame ---
         sf = tk.LabelFrame(self.root, text="📡 Stream", fg=accent, bg=bg,
-                          font=("Arial", 10), pad=10)
+                          font=("Arial", 10), padx=10, pady=5)
         sf.pack(fill="x", padx=15, pady=5)
         
         # Kamera type
