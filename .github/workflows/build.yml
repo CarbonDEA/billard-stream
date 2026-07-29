@@ -1,0 +1,39 @@
+name: Build Billard Stream Installer
+
+on:
+  push:
+    branches: [master]
+    paths: ['app/**', '.github/workflows/build.yml']
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Build .exe with PyInstaller
+        run: |
+          pip install pyinstaller
+          pyinstaller --onefile --windowed --name BillardStream app/app.py
+      
+      - name: Download FFmpeg
+        run: |
+          curl -sSL -o ffmpeg-release.zip https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
+          7z x ffmpeg-release.zip -offmpeg-temp
+          copy ffmpeg-temp\ffmpeg-*\bin\ffmpeg.exe dist\
+      
+      - name: Build Installer with Inno Setup
+        run: |
+          choco install innosetup -y
+          iscc app/installer.iss /dMyAppVersion=1.0.0
+      
+      - name: Upload Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: BillardStream-Setup
+          path: installer/BillardStream-Setup-*.exe
