@@ -1,9 +1,9 @@
-name: Build Billard Stream Installer
+name: Build Billard Stream
 
 on:
   push:
     branches: [master]
-    paths: ['app/**', '.github/workflows/build.yml']
+    paths: ['app/**', '.github/workflows/**']
 
 jobs:
   build:
@@ -16,24 +16,34 @@ jobs:
         with:
           python-version: '3.11'
       
-      - name: Build .exe with PyInstaller
+      - name: Build .exe
         run: |
           pip install pyinstaller
-          pyinstaller --onefile --windowed --name BillardStream app/app.py
+          pyinstaller --onefile --windowed --name "BillardStream" app/app.py
+          echo "EXE built:"
+          dir dist\BillardStream.exe
       
       - name: Download FFmpeg
         run: |
-          curl -sSL -o ffmpeg-release.zip https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
-          7z x ffmpeg-release.zip -offmpeg-temp
-          copy ffmpeg-temp\ffmpeg-*\bin\ffmpeg.exe dist\
+          curl -sSL -o ffmpeg.zip https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
+          7z x ffmpeg.zip -offmpeg-temp > nul
+          copy /y ffmpeg-temp\ffmpeg-*\bin\ffmpeg.exe dist\
+          echo "FFmpeg downloaded"
       
-      - name: Build Installer with Inno Setup
+      - name: Create ZIP
         run: |
-          choco install innosetup -y
-          iscc app/installer.iss /dMyAppVersion=1.0.0
+          cd dist
+          powershell Compress-Archive -Path BillardStream.exe, ffmpeg.exe -DestinationPath ../BillardStream-Portable.zip
+          echo "ZIP created"
       
-      - name: Upload Installer
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: BillardStream-Setup
-          path: installer/BillardStream-Setup-*.exe
+          name: BillardStream-Windows
+          path: dist/BillardStream.exe
+      
+      - name: Upload ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: BillardStream-Portable
+          path: BillardStream-Portable.zip
