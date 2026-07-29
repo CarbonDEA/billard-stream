@@ -22,6 +22,19 @@ _ssl_ctx = ssl.create_default_context()
 _ssl_ctx.check_hostname = False
 _ssl_ctx.verify_mode = ssl.CERT_NONE
 
+# Find FFmpeg (ved siden af .exe eller i PATH)
+def find_ffmpeg():
+    base = os.path.dirname(os.path.abspath(__file__))
+    local = os.path.join(base, "ffmpeg.exe")
+    if os.path.exists(local):
+        return local
+    # Prøv PATH
+    for p in os.environ.get("PATH", "").split(os.pathsep):
+        f = os.path.join(p, "ffmpeg.exe")
+        if os.path.exists(f):
+            return f
+    return "ffmpeg"  # fallback
+
 class BillardApp:
     def __init__(self, root):
         self.root = root
@@ -213,7 +226,7 @@ class BillardApp:
         rtmp = template.replace("{KEY}", key) if template else key
         cam_type = self.cam_type.get()
         os_name = platform.system()
-        cmd = ["ffmpeg"]
+        cmd = [find_ffmpeg()]
         if cam_type == "IP Kamera":
             rtsp = self.ip_entry.get().strip()
             if not rtsp:

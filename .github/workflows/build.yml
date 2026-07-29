@@ -3,7 +3,6 @@ name: Build Billard Stream
 on:
   push:
     branches: [master]
-    paths: ['app/**', '.github/workflows/**']
 
 jobs:
   build:
@@ -16,14 +15,21 @@ jobs:
         with:
           python-version: '3.11'
       
-      - name: Build .exe
+      - name: Download FFmpeg
+        run: |
+          curl -sSL -o ffmpeg.zip https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip
+          7z x ffmpeg.zip -offmpeg-temp -y > $null
+          copy (Get-ChildItem -Path ffmpeg-temp -Recurse -Filter "ffmpeg.exe" | Select-Object -First 1).FullName ffmpeg.exe
+          dir ffmpeg.exe
+      
+      - name: Build .exe med FFmpeg
         run: |
           pip install pyinstaller
-          pyinstaller --onefile --windowed --name "BillardStream" app/app.py
+          pyinstaller --onefile --windowed --name "BillardStream" --add-data "ffmpeg.exe;." app/app.py
           echo "EXE built:"
           dir dist\BillardStream.exe
       
-      - name: Upload .exe
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: BillardStream-Windows
