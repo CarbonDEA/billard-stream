@@ -17,9 +17,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bord'], $_POST['cmd']
         'klub' => $klub,
         'bord' => $bord,
         'cmd' => $cmd,
-        'rtsp' => "rtsp://kamera{$bord}.klubben.dk/stream",
-        'rtmp' => "rtmp://a.rtmp.youtube.com/live2/XXXX-{$bord}",
-        'title' => "{$klubNavn} Bord {$bord}",
+        'rtsp' => "rtsp://kamera{$bord}.klubben.dk/stream", // Placeholder - usually from cameras data
+        'rtmp' => "rtmp://a.rtmp.youtube.com/live2/XXXX-{$bord}", // Placeholder
+        'title' => "{$klubNavn} Bord {$bord}", 
         'status' => 'pending',
         'created' => date('c')
     ];
@@ -27,14 +27,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bord'], $_POST['cmd']
     $msg = "Kommando sendt: {$cmd} bord {$bord}";
 }
 
-// Hent status for alle borde
-$statuses = [];
-$allStatus = readData('status');
-foreach ($allStatus as $s) {
-    if ($s['klub'] === $klub) {
-        $statuses[$s['bord']] = $s['status'];
-    }
-}
+// Dynamisk datahentning per klub
+$cameras = readData('cameras_' . $klub);
+$titles   = readData('titles_' . $klub);
+$statuses = readData('status_' . $klub);
+
 ?><!DOCTYPE html>
 <html lang="da">
 <head>
@@ -46,6 +43,9 @@ foreach ($allStatus as $s) {
 body { font-family:'Nunito Sans',Arial,sans-serif; background:#0a0a0a; color:#e0e0e0; min-height:100vh; }
 .nav { background:#111; border-bottom:1px solid #1a3a2a; padding:.8rem 2rem; display:flex; justify-content:space-between; align-items:center; }
 .nav-brand { color:#00ff41; font-size:1.1rem; font-weight:700; letter-spacing:.1em; }
+.nav-links { display:flex; gap:1.5rem; }
+.nav-links a { color:#888; text-decoration:none; font-size:.9rem; transition:color .2s; }
+.nav-links a:hover, .nav-links a.active { color:#00ff41; }
 .nav-user { color:#888; font-size:.85rem; }
 .nav-user a { color:#ff4444; text-decoration:none; margin-left:1rem; font-size:.8rem; }
 main { max-width:1000px; margin:0 auto; padding:2rem; }
@@ -64,6 +64,8 @@ h1 { font-size:1.3rem; color:#00ff41; margin-bottom:1.5rem; font-weight:400; let
 .btn-start:hover { background:#00cc33; }
 .btn-stop { flex:1; background:#441111; color:#ff4444; border:1px solid #661111; padding:.5rem; border-radius:8px; font-size:.85rem; font-weight:600; cursor:pointer; }
 .btn-stop:hover { background:#661111; }
+.empty-state { text-align:center; padding:3rem; background:#111; border:1px dashed #333; border-radius:12px; color:#666; }
+.empty-state a { color:#00ff41; text-decoration:none; font-weight:bold; }
 </style>
 </head>
 <body>
@@ -85,27 +87,35 @@ h1 { font-size:1.3rem; color:#00ff41; margin-bottom:1.5rem; font-weight:400; let
         <div class="msg"><?= htmlspecialchars($msg) ?></div>
     <?php endif; ?>
     
-    <div class="grid">
-        <?php for ($bord = 1; $bord <= 4; $bord++): 
-            $s = $statuses[$bord] ?? 'stopped';
-            $badge = $s === 'running' ? 'badge-on' : ($s === 'error' ? 'badge-error' : 'badge-off');
-            $label = $s === 'running' ? '● live' : ($s === 'error' ? '● fejl' : '● slukket');
-        ?>
-        <div class="card">
-            <h3>Bord <?= $bord ?></h3>
-            <p class="cam">IP Camera <?= $bord ?> · 1080p</p>
-            <div class="badge <?= $badge ?>"><?= $label ?></div>
-            <form method="post">
-                <input type="hidden" name="bord" value="<?= $bord ?>">
-                <?php if ($s === 'running'): ?>
-                    <button type="submit" name="cmd" value="stop" class="btn-stop">⏹ STOP</button>
-                <?php else: ?>
-                    <button type="submit" name="cmd" value="start" class="btn-start">▶ START STREAM</button>
-                <?php endif; ?>
-            </form>
+    <?php if (!empty($cameras)): ?>
+        <div class="grid">
+            <?php foreach ($cameras as $cam): 
+                $bord = (int)$cam['bord'];
+                $s = $statuses[$bord] ?? 'stopped';
+                $badge = $s === 'running' ? 'badge-on' : ($s === 'error' ? 'badge-error' : 'badge-off');
+                $label = $s === 'running' ? '● live' : ($s === 'error' ? '● fejl' : '● slukket');
+            ?>
+            <div class="card">
+                <h3><?= htmlspecialchars($cam['navn']) ?> (Bord <?= $bord ?>)</h3>
+                <p class="cam"><?= htmlspecialchars($cam['type'] ?? 'Kamera') ?> · <?= htmlspecialchars($cam['resolution'] ?? '1080p') ?></p>
+                <div class="badge <?= $badge ?>"><?= $label ?></div>
+                <form method="post">
+                    <input type="hidden" name="bord" value="<?= $bord ?>">
+                    <?php if ($s === 'running'): ?>
+                        <button type="submit" name="cmd" value="stop" class="btn-stop">⏹ STOP</button>
+                    <?php else: ?>
+                        <button type="submit" name="cmd" value="start" class="btn-start">▶ START STREAM</button>
+                    <?php endif; ?>
+                </form>
+            </div>
+            <?php endforeach; ?>
         </div>
-        <?php endfor; ?>
-    </div>
+    <?php else: ?>
+        <div class="empty-state">
+            Ingen kameraer konfigureret for denne klub.<br><br>
+            <a href="cameras.php">Gå til kameraindstillinger &rarr;</a>
+        </div>
+    <?php endif; ?>
 </main>
 </body>
 </html>
